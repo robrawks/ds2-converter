@@ -1,11 +1,29 @@
 # DS2 → MP3 Batch Converter
 
-A standalone, fully client-side web app that converts Olympus `.ds2` and `.dss`
-dictation recordings to MP3. Built for sending recordings to ElevenLabs
-Speech-to-Text without uploading audio to a third-party converter first.
+Two ways to convert Olympus `.ds2` / `.dss` dictation recordings to MP3:
 
-Everything — file inspection, decryption, decoding, MP3 encoding — runs in your
-browser via WebAssembly. No audio leaves your machine.
+1. **`ds2-convert` CLI** — headless Node tool for batch processing on a server.
+2. **Browser app** — drag-and-drop static page for ad-hoc conversion.
+
+Both share the same WASM decoder + JS MP3 encoder, so output is identical.
+Audio never leaves your machine.
+
+## CLI quick start
+
+```bash
+npm install        # install deps
+npm link           # install ds2-convert globally (once)
+
+ds2-convert recordings/*.ds2
+ds2-convert -b 96 -o /var/transcripts/mp3 recordings/*.ds2
+DS2_PASSWORD="$(cat secret.txt)" ds2-convert encrypted/*.ds2
+ds2-convert --json --quiet *.ds2 > results.jsonl
+```
+
+Run `ds2-convert --help` for full options. Exit code is 0 if all conversions
+succeed, 1 otherwise — safe to chain in shell pipelines.
+
+## Browser app
 
 ## Features
 
@@ -56,14 +74,15 @@ needing a browser.
 ## File layout
 
 ```
-index.html        UI shell
-app.js            entry module: drop/inspect/decode/encode flow
+cli/convert.mjs   headless CLI (registered as `ds2-convert`)
+index.html        browser app shell
+app.js            browser entry: drop/inspect/decode/encode flow
 styles.css
 vendor/dss-codec/ vendored WASM decoder (MIT, hirparak/dss-codec)
 vendor/lamejs/    vendored MP3 encoder (LGPL, zhuker/lamejs)
 vendor/jszip/     vendored ZIP packager (MIT/GPLv3)
 scripts/          Node smoke test
-package.json      pinned deps, used only for vendoring + smoke test
+package.json      pinned deps + bin entry for ds2-convert
 ```
 
 ## Roadmap (Phase 2)
