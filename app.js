@@ -6,9 +6,17 @@ const fileRows = document.getElementById("file-rows");
 const convertAllBtn = document.getElementById("convert-all");
 const downloadZipBtn = document.getElementById("download-zip");
 const clearAllBtn = document.getElementById("clear-all");
+const formatSelect = document.getElementById("format");
 const bitrateSelect = document.getElementById("bitrate");
+const bitrateSetting = document.getElementById("bitrate-setting");
 const defaultPasswordInput = document.getElementById("default-password");
 const globalStatus = document.getElementById("global-status");
+
+formatSelect.addEventListener("change", syncBitrateVisibility);
+syncBitrateVisibility();
+function syncBitrateVisibility() {
+  bitrateSetting.hidden = formatSelect.value !== "mp3";
+}
 
 const state = {
   ready: false,
@@ -75,8 +83,10 @@ function addFiles(files) {
       encryption: null,
       sampleRate: null,
       durationSec: null,
-      mp3Bytes: null,
-      mp3Url: null,
+      outBytes: null,
+      outUrl: null,
+      outExt: null,
+      outMime: null,
       error: null,
     };
     state.jobs.set(id, job);
@@ -88,7 +98,7 @@ function addFiles(files) {
 
 function clearAll() {
   for (const job of state.jobs.values()) {
-    if (job.mp3Url) URL.revokeObjectURL(job.mp3Url);
+    if (job.outUrl) URL.revokeObjectURL(job.outUrl);
   }
   state.jobs.clear();
   fileRows.innerHTML = '<tr class="empty"><td colspan="5">No files yet.</td></tr>';
@@ -118,6 +128,7 @@ async function convertAll() {
   if (state.busy) return;
   state.busy = true;
   refreshControls();
+  const format = formatSelect.value;
   const bitrate = parseInt(bitrateSelect.value, 10);
   const defaultPwd = defaultPasswordInput.value || "";
   const todo = [...state.jobs.values()].filter((j) =>
@@ -127,7 +138,7 @@ async function convertAll() {
   for (const job of todo) {
     setStatus(`Converting ${++done}/${todo.length}: ${job.name}`);
     try {
-      await convertOne(job, bitrate, defaultPwd);
+      await convertOne(job, format, bitrate, defaultPwd);
     } catch (err) {
       job.status = "failed";
       job.error = formatError(err);
@@ -141,7 +152,7 @@ async function convertAll() {
   setStatus(`Done. ${ok} converted, ${fail} failed.`);
 }
 
-async function convertOne(job, bitrate, defaultPwd) {
+async function convertOne(job, format, bitrate, defaultPwd) {
   job.status = "decoding";
   job.error = null;
   setRow(job);
@@ -175,13 +186,45 @@ async function convertOne(job, bitrate, defaultPwd) {
   setRow(job);
   await Promise.resolve();
 
-  job.mp3Bytes = encodeMp3(pcm, sampleRate, bitrate);
-  if (job.mp3Url) URL.revokeObjectURL(job.mp3Url);
-  job.mp3Url = URL.createObjectURL(
-    new Blob([job.mp3Bytes], { type: "audio/mpeg" }),
-  );
+  if (format === "wav") {
+    job.outBytes = encodeWav(pcm, sampleRate);
+    job.outExt = "wav";
+    job.outMime = "audio/wav";
+  } else {
+    job.outBytes = encodeMp3(pcm, sampleRate, bitrate);
+    job.outExt = "mp3";
+    job.outMime = "audio/mpeg";
+  }
+  if (job.outUrl) URL.revokeObjectURL(job.outUrl);
+  job.outUrl = URL.createObjectURL(new Blob([job.outBytes], { type: job.outMime }));
   job.status = "done";
   setRow(job);
+}
+
+function encodeWav(float32Pcm, sampleRate) {
+  const i16 = floatToInt16(float32Pcm);
+  const dataBytes = i16.length * 2;
+  const buf = new ArrayBuffer(44 + dataBytes);
+  const view = new DataView(buf);
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+  new Int16Array(buf, 44).set(i16);
+  return new Uint8Array(buf);
+}
+
+function writeAscii(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
 }
 
 function encodeMp3(float32Pcm, sampleRate, kbps) {
@@ -234,7 +277,7 @@ async function downloadZip() {
   const zip = new Zip();
   for (const job of ready) {
     const base = job.name.replace(/\.[^.]+$/, "");
-    zip.file(`${base}.mp3`, job.mp3Bytes);
+    zip.file(`${base}.${job.outExt}`, job.outBytes);
   }
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
@@ -285,9 +328,10 @@ function setRow(job) {
     ? `failed: ${job.error}`
     : job.status;
   const out = tr.querySelector(".cell-output");
-  if (job.status === "done" && job.mp3Url) {
+  if (job.status === "done" && job.outUrl) {
     const base = job.name.replace(/\.[^.]+$/, "");
-    out.innerHTML = `<a href="${job.mp3Url}" download="${base}.mp3">Download MP3</a>`;
+    const label = (job.outExt || "").toUpperCase();
+    out.innerHTML = `<a href="${job.outUrl}" download="${base}.${job.outExt}">Download ${label}</a>`;
   } else {
     out.textContent = "—";
   }

@@ -1,45 +1,58 @@
 #!/usr/bin/env node
-// DS2/DSS -> MP3 batch converter, headless-friendly.
+// DS2/DSS -> WAV/MP3 batch converter, headless-friendly.
 //
 // Usage:
 //   ds2-convert [options] <files...>
 // Options:
-//   -o, --out-dir <dir>      output directory (default: ./mp3s)
-//   -b, --bitrate <kbps>     MP3 bitrate, 16-320 (default: 64)
+//   -f, --format <wav|mp3>   output format (default: wav, lossless)
+//   -o, --out-dir <dir>      output directory (default: ./out)
+//   -b, --bitrate <kbps>     MP3 bitrate, 16-320 (default: 64) — mp3 only
 //   -p, --password <pwd>     password for encrypted DS2 files
 //                            (or set DS2_PASSWORD env var)
 //   --skip-existing          skip files whose output already exists
 //   --json                   emit JSON results to stdout (one line per file)
 //   --quiet                  suppress per-file output (only errors + summary)
 //   -h, --help               show help
+//
+// Defaults to WAV because:
+//   - DS2 is already a lossy ~28 kbps codec; another lossy step (MP3) compounds
+//     artifacts that hurt speech-to-text accuracy.
+//   - ElevenLabs Scribe v2 accepts WAV directly and recommends uncompressed PCM.
+//   - 16 kHz mono WAV is ~115 MB/hour — well under ElevenLabs's 3 GB / 10 hour limit.
 
 import { parseArgs } from "node:util";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { decode, decodeWithPassword, inspect } from "dss-codec";
 import lamejs from "@breezystack/lamejs";
 
 const HELP = `\
-ds2-convert: batch convert Olympus .ds2 / .dss files to MP3
+ds2-convert: batch convert Olympus .ds2 / .dss files to WAV or MP3
 
 Usage:
   ds2-convert [options] <files...>
 
 Options:
-  -o, --out-dir <dir>     output directory (default: ./mp3s)
-  -b, --bitrate <kbps>    MP3 bitrate, 16-320 (default: 64)
-  -p, --password <pwd>    password for encrypted DS2 files
-                          (or set DS2_PASSWORD env var)
-      --skip-existing     skip files whose output already exists
-      --json              emit JSON results to stdout (one line per file)
-      --quiet             suppress per-file output
-  -h, --help              show help
+  -f, --format <wav|mp3>   output format (default: wav)
+  -o, --out-dir <dir>      output directory (default: ./out)
+  -b, --bitrate <kbps>     MP3 bitrate, 16-320 (default: 64) — mp3 only
+  -p, --password <pwd>     password for encrypted DS2 files
+                           (or set DS2_PASSWORD env var)
+      --skip-existing      skip files whose output already exists
+      --json               emit JSON results to stdout (one line per file)
+      --quiet              suppress per-file output
+  -h, --help               show help
+
+WAV is the default because the DS2 codec is already lossy; MP3 adds a
+second lossy step that hurts speech-to-text accuracy. Use MP3 only when
+file size matters (archive, email, etc.).
 
 Examples:
   ds2-convert recordings/*.ds2
-  ds2-convert -b 96 -o /var/transcripts/mp3 *.ds2
-  DS2_PASSWORD=secret ds2-convert -p "$DS2_PASSWORD" encrypted/*.ds2
+  ds2-convert -f mp3 -b 96 -o /var/archive recordings/*.ds2
+  DS2_PASSWORD="$(cat secret.txt)" ds2-convert encrypted/*.ds2
+  ds2-convert --json --quiet *.ds2 > results.jsonl
 `;
 
 const args = parseCli();
@@ -82,7 +95,7 @@ process.exit(summary.failed > 0 ? 1 : 0);
 async function processOne(inputPath) {
   const inputAbs = resolve(inputPath);
   const baseName = basename(inputPath, extname(inputPath));
-  const outputPath = join(outDir, `${baseName}.mp3`);
+  const outputPath = join(outDir, `${baseName}.${args.format}`);
   const start = performance.now();
 
   let result = {
@@ -94,6 +107,7 @@ async function processOne(inputPath) {
     outputBytes: null,
     format: null,
     encryption: null,
+    encoding: args.format,
     elapsedMs: null,
     error: null,
   };
@@ -140,14 +154,16 @@ async function processOne(inputPath) {
     result.durationSec = pcm.length / sampleRate;
     summary.totalDurationSec += result.durationSec;
 
-    const mp3 = encodeMp3(pcm, sampleRate, args.bitrate);
-    await writeFile(outputPath, mp3);
+    const outBytes = args.format === "wav"
+      ? encodeWav(pcm, sampleRate)
+      : encodeMp3(pcm, sampleRate, args.bitrate);
+    await writeFile(outputPath, outBytes);
 
-    result.outputBytes = mp3.length;
+    result.outputBytes = outBytes.length;
     result.elapsedMs = Math.round(performance.now() - start);
     result.status = "ok";
     summary.ok++;
-    summary.totalOutputBytes += mp3.length;
+    summary.totalOutputBytes += outBytes.length;
     emit(result);
   } catch (err) {
     result.status = "failed";
@@ -176,13 +192,47 @@ function emit(r) {
   }
 }
 
+function floatToInt16(f32) {
+  const out = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const x = Math.max(-1, Math.min(1, f32[i]));
+    out[i] = (x * 32767) | 0;
+  }
+  return out;
+}
+
+function encodeWav(float32Pcm, sampleRate) {
+  const i16 = floatToInt16(float32Pcm);
+  const dataBytes = i16.length * 2;
+  const buf = new ArrayBuffer(44 + dataBytes);
+  const view = new DataView(buf);
+  // RIFF header
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  writeAscii(view, 8, "WAVE");
+  // fmt chunk
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);            // chunk size
+  view.setUint16(20, 1, true);             // PCM format
+  view.setUint16(22, 1, true);             // channels = 1
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate (mono 16-bit)
+  view.setUint16(32, 2, true);             // block align
+  view.setUint16(34, 16, true);            // bits per sample
+  // data chunk
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+  new Int16Array(buf, 44).set(i16);
+  return new Uint8Array(buf);
+}
+
+function writeAscii(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
 function encodeMp3(float32Pcm, sampleRate, kbps) {
   const enc = new lamejs.Mp3Encoder(1, sampleRate, kbps);
-  const i16 = new Int16Array(float32Pcm.length);
-  for (let i = 0; i < float32Pcm.length; i++) {
-    const x = Math.max(-1, Math.min(1, float32Pcm[i]));
-    i16[i] = (x * 32767) | 0;
-  }
+  const i16 = floatToInt16(float32Pcm);
   const blockSize = 1152;
   const chunks = [];
   for (let i = 0; i < i16.length; i += blockSize) {
@@ -208,7 +258,8 @@ function parseCli() {
   try {
     parsed = parseArgs({
       options: {
-        "out-dir": { type: "string", short: "o", default: "./mp3s" },
+        format: { type: "string", short: "f", default: "wav" },
+        "out-dir": { type: "string", short: "o", default: "./out" },
         bitrate: { type: "string", short: "b", default: "64" },
         password: { type: "string", short: "p" },
         "skip-existing": { type: "boolean", default: false },
@@ -223,12 +274,18 @@ function parseCli() {
     process.stdout.write(HELP);
     process.exit(2);
   }
+  const fmt = parsed.values.format.toLowerCase();
+  if (fmt !== "wav" && fmt !== "mp3") {
+    process.stderr.write(`error: --format must be wav or mp3 (got ${parsed.values.format})\n`);
+    process.exit(2);
+  }
   const bitrate = parseInt(parsed.values.bitrate, 10);
   if (!Number.isFinite(bitrate) || bitrate < 16 || bitrate > 320) {
     process.stderr.write(`error: bitrate must be 16-320 (got ${parsed.values.bitrate})\n`);
     process.exit(2);
   }
   return {
+    format: fmt,
     outDir: parsed.values["out-dir"],
     bitrate,
     password: parsed.values.password,

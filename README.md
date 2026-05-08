@@ -1,12 +1,17 @@
-# DS2 → MP3 Batch Converter
+# DS2 → WAV / MP3 Batch Converter
 
-Two ways to convert Olympus `.ds2` / `.dss` dictation recordings to MP3:
+Two ways to convert Olympus `.ds2` / `.dss` dictation recordings to WAV or MP3:
 
 1. **`ds2-convert` CLI** — headless Node tool for batch processing on a server.
 2. **Browser app** — drag-and-drop static page for ad-hoc conversion.
 
-Both share the same WASM decoder + JS MP3 encoder, so output is identical.
+Both share the same WASM decoder, so output is identical.
 Audio never leaves your machine.
+
+**Defaults to WAV (lossless).** DS2 is already a lossy ~28 kbps codec; adding a
+second lossy step (MP3) compounds artifacts that hurt speech-to-text accuracy.
+For ElevenLabs Scribe v2 and similar STT services, send WAV directly. Use MP3
+only when you specifically need small files for archive or email.
 
 ## CLI quick start
 
@@ -14,14 +19,30 @@ Audio never leaves your machine.
 npm install        # install deps
 npm link           # install ds2-convert globally (once)
 
-ds2-convert recordings/*.ds2
-ds2-convert -b 96 -o /var/transcripts/mp3 recordings/*.ds2
+ds2-convert recordings/*.ds2                         # WAV (default)
+ds2-convert -f mp3 -b 96 -o /var/archive *.ds2       # MP3 96 kbps
 DS2_PASSWORD="$(cat secret.txt)" ds2-convert encrypted/*.ds2
 ds2-convert --json --quiet *.ds2 > results.jsonl
 ```
 
 Run `ds2-convert --help` for full options. Exit code is 0 if all conversions
 succeed, 1 otherwise — safe to chain in shell pipelines.
+
+## Sending output to ElevenLabs Scribe v2
+
+ElevenLabs Speech-to-Text accepts WAV, FLAC, MP3, OPUS, and others, with a
+3 GB / 10-hour per-request limit. WAV at 16 kHz mono (the default this tool
+produces) is ~115 MB/hour — easily within budget. Recommended:
+
+```bash
+ds2-convert recordings/*.ds2                            # produces ./out/*.wav
+curl -X POST https://api.elevenlabs.io/v1/speech-to-text \
+  -H "xi-api-key: $XI_API_KEY" \
+  -F "model_id=scribe_v2" \
+  -F "file=@./out/recording.wav"
+```
+
+Phase 2 (planned): a `ds2-transcribe` CLI that submits to Scribe v2 directly.
 
 ## Browser app
 
@@ -31,8 +52,8 @@ succeed, 1 otherwise — safe to chain in shell pipelines.
 - **Per-file status**: pending → decoding → encoding → done, or failed with reason.
 - **Format auto-detection** (DSS / DS2 SP / DS2 QP) with native sample-rate handling.
 - **Encrypted DS2** support via password prompt or shared default password.
-- **MP3 bitrate selector** (32–128 kbps; speech defaults to 64).
-- **Per-file MP3 download**, or **download all as ZIP**.
+- **WAV (default, lossless) or MP3** with bitrate selector (32–128 kbps).
+- **Per-file download**, or **download all as ZIP**.
 - **Zero build step.** Static HTML + JS + WASM, served by any web server.
 
 ## Usage

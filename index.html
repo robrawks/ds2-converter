@@ -33,13 +33,20 @@
 
       <section class="settings panel">
         <div class="setting">
+          <label for="format">Output format</label>
+          <select id="format">
+            <option value="wav" selected>WAV — lossless (recommended for ElevenLabs)</option>
+            <option value="mp3">MP3 — smaller, second lossy step</option>
+          </select>
+        </div>
+        <div class="setting" id="bitrate-setting" hidden>
           <label for="bitrate">MP3 bitrate</label>
           <select id="bitrate">
             <option value="32">32 kbps (smallest)</option>
             <option value="48">48 kbps</option>
             <option value="64" selected>64 kbps (recommended for speech)</option>
             <option value="96">96 kbps</option>
-            <option value="128">128 kbps (largest)</option>
+            <option value="128">128 kbps</option>
           </select>
         </div>
         <div class="setting">
