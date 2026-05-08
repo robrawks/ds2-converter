@@ -1,0 +1,233 @@
+:root {
+  --bg: #0f1115;
+  --panel: #161922;
+  --panel-2: #1d2230;
+  --border: #232a3b;
+  --text: #e6e8ee;
+  --muted: #8a93a8;
+  --accent: #5d8ff0;
+  --accent-hover: #6f9bf3;
+  --ok: #5dd2a3;
+  --warn: #f3c969;
+  --err: #ef6b6b;
+  --mono: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+header h1 {
+  font-size: 28px;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+
+header .lede {
+  color: var(--muted);
+  margin: 0 0 20px;
+  max-width: 70ch;
+}
+
+code {
+  font-family: var(--mono);
+  background: var(--panel-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.93em;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 16px 0;
+}
+
+.dropzone {
+  background: var(--panel);
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+  outline: none;
+}
+
+.dropzone:hover, .dropzone:focus {
+  background: var(--panel-2);
+  border-color: var(--accent);
+}
+
+.dropzone.drag {
+  background: var(--panel-2);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.dropzone-primary {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.dropzone-secondary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 600px) {
+  .settings { grid-template-columns: 1fr; }
+}
+
+.setting label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.setting select, .setting input {
+  width: 100%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.setting select:focus, .setting input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 16px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+button:hover:not(:disabled) { background: var(--accent-hover); }
+
+button:disabled {
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+#download-zip, #clear-all {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+#download-zip:hover:not(:disabled), #clear-all:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--accent);
+}
+
+.status {
+  margin: 0;
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.status.error { color: var(--err); }
+
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.file-table th, .file-table td {
+  text-align: left;
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.file-table tr.empty td {
+  color: var(--muted);
+  text-align: center;
+  padding: 30px;
+}
+
+.cell-name { font-family: var(--mono); font-size: 13px; word-break: break-all; }
+.cell-format { font-family: var(--mono); font-size: 13px; }
+.cell-duration { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.cell-status {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-pending { color: var(--muted); }
+.status-decoding, .status-encoding { color: var(--warn); }
+.status-done { color: var(--ok); }
+.status-failed { color: var(--err); text-transform: none; letter-spacing: 0; }
+
+.cell-output a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.cell-output a:hover { text-decoration: underline; }
+
+footer {
+  margin-top: 40px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+footer a {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+footer a:hover { color: var(--accent); }

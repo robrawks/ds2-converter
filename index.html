@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DS2 → MP3 Batch Converter</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>DS2 → MP3 Batch Converter</h1>
+        <p class="lede">
+          Drop Olympus <code>.ds2</code> or <code>.dss</code> dictation files. They
+          decode and re-encode to MP3 entirely in your browser — no upload, no
+          server. Designed for sending recordings to ElevenLabs Speech-to-Text.
+        </p>
+      </header>
+
+      <section id="dropzone" class="dropzone" tabindex="0">
+        <p class="dropzone-primary">Drop files here, or click to browse</p>
+        <p class="dropzone-secondary">
+          Multiple files accepted · plain or encrypted DS2 supported
+        </p>
+        <input
+          id="file-input"
+          type="file"
+          accept=".dss,.ds2,application/octet-stream"
+          multiple
+          hidden
+        />
+      </section>
+
+      <section class="settings panel">
+        <div class="setting">
+          <label for="bitrate">MP3 bitrate</label>
+          <select id="bitrate">
+            <option value="32">32 kbps (smallest)</option>
+            <option value="48">48 kbps</option>
+            <option value="64" selected>64 kbps (recommended for speech)</option>
+            <option value="96">96 kbps</option>
+            <option value="128">128 kbps (largest)</option>
+          </select>
+        </div>
+        <div class="setting">
+          <label for="default-password">Default password (encrypted files)</label>
+          <input
+            id="default-password"
+            type="password"
+            placeholder="Optional — applied to all encrypted files"
+            autocomplete="off"
+          />
+        </div>
+      </section>
+
+      <section class="actions panel">
+        <button id="convert-all" type="button" disabled>Convert all</button>
+        <button id="download-zip" type="button" disabled>Download all as ZIP</button>
+        <button id="clear-all" type="button" disabled>Clear list</button>
+        <p id="global-status" class="status">Loading WASM runtime…</p>
+      </section>
+
+      <section class="files panel">
+        <table id="file-table" class="file-table">
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Format</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Output</th>
+            </tr>
+          </thead>
+          <tbody id="file-rows">
+            <tr class="empty"><td colspan="5">No files yet.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <footer>
+        <p>
+          Powered by
+          <a href="https://github.com/gaspardpetit/dss-codec-wasm" target="_blank" rel="noopener">dss-codec-wasm</a>
+          (decoder, MIT) and
+          <a href="https://github.com/zhuker/lamejs" target="_blank" rel="noopener">lamejs</a>
+          (MP3 encoder, LGPL).
+          Reverse engineering by
+          <a href="https://github.com/hirparak/dss-codec" target="_blank" rel="noopener">Kieran Hirpara</a>.
+        </p>
+      </footer>
+    </main>
+
+    <script src="./vendor/lamejs/lamejs.iife.js"></script>
+    <script src="./vendor/jszip/jszip.min.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
