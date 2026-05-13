@@ -110,6 +110,7 @@ async function processOne(inputPath) {
     encoding: args.format,
     elapsedMs: null,
     error: null,
+    skippedPrefixBytes: 0,
   };
 
   try {
@@ -126,7 +127,14 @@ async function processOne(inputPath) {
       }
     }
 
-    const bytes = new Uint8Array(await readFile(inputAbs));
+    const rawBytes = new Uint8Array(await readFile(inputAbs));
+    // Tolerate a short preamble of garbage bytes before the DS2/DSS magic.
+    // The Olympus DS-5000 firmware (v1.08, 2012) occasionally writes 1-2 bytes
+    // of uninitialized DMA buffer ahead of `\x03ds2` / `\x02dss` on file close.
+    // The upstream codec (hirparak/dss-codec) requires the magic at offset 0
+    // and rejects the file with "unsupported format type: <byte0>" otherwise.
+    const { bytes, skippedPrefixBytes } = stripPreamble(rawBytes);
+    if (skippedPrefixBytes > 0) result.skippedPrefixBytes = skippedPrefixBytes;
     const ins = inspect(bytes.subarray(0, Math.min(bytes.length, 4096)));
     result.format = ins.format;
     result.encryption = ins.encryption;
@@ -182,14 +190,39 @@ function emit(r) {
   }
   if (args.quiet && r.status !== "failed") return;
   if (r.status === "ok") {
+    const skipNote = r.skippedPrefixBytes
+      ? ` [skipped ${r.skippedPrefixBytes}B preamble]`
+      : "";
     log(
-      `  ok    ${r.input}  ${r.format} ${r.durationSec.toFixed(1)}s -> ${basename(r.output)} (${formatBytes(r.outputBytes)}, ${r.elapsedMs}ms)`,
+      `  ok    ${r.input}  ${r.format} ${r.durationSec.toFixed(1)}s -> ${basename(r.output)} (${formatBytes(r.outputBytes)}, ${r.elapsedMs}ms)${skipNote}`,
     );
   } else if (r.status === "skipped") {
     log(`  skip  ${r.input}  (output exists)`);
   } else {
     log(`  FAIL  ${r.input}  ${r.error}`);
   }
+}
+
+// Scan up to 8 leading bytes for the DS2 (\x03ds2) or DSS (\x02dss / \x03dss)
+// magic. If found at offset > 0, return the trimmed view; otherwise return the
+// original bytes unchanged and let the codec produce its normal error.
+function stripPreamble(bytes) {
+  const MAX_PREAMBLE = 8;
+  const limit = Math.min(bytes.length - 4, MAX_PREAMBLE);
+  for (let off = 0; off <= limit; off++) {
+    const b0 = bytes[off];
+    const b1 = bytes[off + 1];
+    const b2 = bytes[off + 2];
+    const b3 = bytes[off + 3];
+    // \x03ds2  (0x03 0x64 0x73 0x32) — DS2
+    // \x02dss or \x03dss (0x02|0x03 0x64 0x73 0x73) — DSS Classic / Pro
+    if (b1 === 0x64 && b2 === 0x73 && (b3 === 0x32 || b3 === 0x73)) {
+      if ((b3 === 0x32 && b0 === 0x03) || (b3 === 0x73 && (b0 === 0x02 || b0 === 0x03))) {
+        return { bytes: off === 0 ? bytes : bytes.subarray(off), skippedPrefixBytes: off };
+      }
+    }
+  }
+  return { bytes, skippedPrefixBytes: 0 };
 }
 
 function floatToInt16(f32) {

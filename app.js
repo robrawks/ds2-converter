@@ -108,9 +108,11 @@ function clearAll() {
 
 async function inspectAsync(job) {
   try {
-    const head = new Uint8Array(
+    const rawHead = new Uint8Array(
       await job.file.slice(0, Math.min(job.file.size, 4096)).arrayBuffer(),
     );
+    const { bytes: head, skippedPrefixBytes } = stripPreamble(rawHead);
+    job.skippedPrefixBytes = skippedPrefixBytes;
     const ins = inspect(head);
     job.format = ins.format;
     job.encryption = ins.encryption;
@@ -157,7 +159,11 @@ async function convertOne(job, format, bitrate, defaultPwd) {
   job.error = null;
   setRow(job);
 
-  const bytes = new Uint8Array(await job.file.arrayBuffer());
+  const rawBytes = new Uint8Array(await job.file.arrayBuffer());
+  // Tolerate uninitialized-buffer preamble bytes before the DS2/DSS magic.
+  // See cli/convert.mjs:stripPreamble for the rationale.
+  const { bytes, skippedPrefixBytes } = stripPreamble(rawBytes);
+  job.skippedPrefixBytes = skippedPrefixBytes;
   let result;
   try {
     if (job.encryption && job.encryption !== "none") {
@@ -248,6 +254,28 @@ function encodeMp3(float32Pcm, sampleRate, kbps) {
     off += c.length;
   }
   return merged;
+}
+
+// Scan up to 8 leading bytes for the DS2 (\x03ds2) or DSS (\x02dss / \x03dss)
+// magic. If found at offset > 0, return the trimmed view; otherwise return the
+// original bytes unchanged and let the codec produce its normal error.
+// Olympus DS-5000 firmware v1.08 occasionally writes 1-2 bytes of uninitialized
+// DMA buffer ahead of the magic on file close.
+function stripPreamble(bytes) {
+  const MAX_PREAMBLE = 8;
+  const limit = Math.min(bytes.length - 4, MAX_PREAMBLE);
+  for (let off = 0; off <= limit; off++) {
+    const b0 = bytes[off];
+    const b1 = bytes[off + 1];
+    const b2 = bytes[off + 2];
+    const b3 = bytes[off + 3];
+    if (b1 === 0x64 && b2 === 0x73 && (b3 === 0x32 || b3 === 0x73)) {
+      if ((b3 === 0x32 && b0 === 0x03) || (b3 === 0x73 && (b0 === 0x02 || b0 === 0x03))) {
+        return { bytes: off === 0 ? bytes : bytes.subarray(off), skippedPrefixBytes: off };
+      }
+    }
+  }
+  return { bytes, skippedPrefixBytes: 0 };
 }
 
 function floatToInt16(f32) {
