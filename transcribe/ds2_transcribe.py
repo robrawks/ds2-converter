@@ -153,7 +153,7 @@ def out_path_for(input_path, out_dir):
     return Path(out_dir) / base if out_dir else Path(input_path).with_suffix(".txt")
 
 
-def process_one(path, transcriber, out_dir, archive_dir=None):
+def process_one(path, transcriber, out_dir, archive_dir=None, verbose=False):
     result = {
         "input": str(path),
         "output": None,
@@ -177,6 +177,12 @@ def process_one(path, transcriber, out_dir, archive_dir=None):
         samples, rate = decode_to_int16(path, fmt)
         result["durationSec"] = round(len(samples) / rate, 2)
         audio = to_whisper_audio(samples, rate)
+
+        if verbose:
+            # ~4x realtime on a 4-vCPU CPU; rough ETA so a long file doesn't look hung.
+            eta = max(1, round(result["durationSec"] / 4))
+            log(f"        {result['durationSec']:.0f}s audio — transcribing "
+                f"(~{eta}s on CPU, no output until done)...")
 
         text = transcriber.transcribe(audio)
         out = out_path_for(path, out_dir)
@@ -242,9 +248,16 @@ def main(argv=None):
     transcriber = Transcriber(args.model, args.threads, args.language)
     ok = failed = 0
     failures = []
+    n = len(args.files)
+    verbose = not args.json
 
-    for path in args.files:
-        r = process_one(path, transcriber, args.out_dir, args.archive_dir)
+    if verbose:
+        log(f"Loading model '{args.model}' (first file also loads weights)...")
+
+    for i, path in enumerate(args.files, 1):
+        if verbose:
+            log(f"  [{i}/{n}] {Path(path).name}")
+        r = process_one(path, transcriber, args.out_dir, args.archive_dir, verbose)
         if r["status"] == "ok":
             ok += 1
         else:
@@ -262,16 +275,18 @@ def main(argv=None):
 def emit(r, as_json):
     if as_json:
         sys.stdout.write(json.dumps(r) + "\n")
+        sys.stdout.flush()
         return
     if r["status"] == "ok":
-        log(f"  ok    {r['input']}  {r['format']} {r['durationSec']}s "
-            f"-> {Path(r['output']).name} ({r['words']} words, {r['elapsedMs']}ms)")
+        log(f"        ok -> {Path(r['output']).name} "
+            f"({r['words']} words, {r['elapsedMs'] / 1000:.0f}s)")
     else:
-        log(f"  FAIL  {r['input']}  {r['error']}")
+        log(f"        FAIL: {r['error']}")
 
 
 def log(msg):
     sys.stderr.write(msg + "\n")
+    sys.stderr.flush()
 
 
 if __name__ == "__main__":
