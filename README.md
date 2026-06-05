@@ -1,12 +1,14 @@
-# DS2 → WAV / MP3 Batch Converter
+# DS2 → WAV / MP3 / Text
 
-Two ways to convert Olympus `.ds2` / `.dss` dictation recordings to WAV or MP3:
+Tools for working with Olympus `.ds2` / `.dss` dictation recordings:
 
-1. **`ds2-convert` CLI** — headless Node tool for batch processing on a server.
+1. **`ds2-convert` CLI** — headless Node tool: batch convert to WAV or MP3.
 2. **Browser app** — drag-and-drop static page for ad-hoc conversion.
+3. **`ds2-transcribe` CLI** — headless Python tool: convert *and* transcribe to
+   plain text, **fully offline** (local Whisper, no API keys). See
+   [Local transcription](#local-transcription-ds2-transcribe).
 
-Both share the same WASM decoder, so output is identical.
-Audio never leaves your machine.
+Everything runs locally — audio never leaves your machine.
 
 **Defaults to WAV (lossless).** DS2 is already a lossy ~28 kbps codec; adding a
 second lossy step (MP3) compounds artifacts that hurt speech-to-text accuracy.
@@ -42,7 +44,49 @@ curl -X POST https://api.elevenlabs.io/v1/speech-to-text \
   -F "file=@./out/recording.wav"
 ```
 
-Phase 2 (planned): a `ds2-transcribe` CLI that submits to Scribe v2 directly.
+## Local transcription (`ds2-transcribe`)
+
+A fully-offline alternative to cloud STT: decode a `.ds2` / `.dss` (or `.wav`) and
+transcribe it to plain text on your own machine with a local Whisper model. No API
+keys, no uploads, no per-minute fees. Built for the headless VPS path.
+
+Stack: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2,
+CPU, int8) running `base.en`, fed directly from the vendored pure-Python DS2/DSS
+decoder — no intermediate audio file.
+
+### One-time setup
+
+```bash
+bash scripts/setup-whisper.sh          # venv + faster-whisper + download base.en
+# optional: put it on PATH
+ln -s "$PWD/bin/ds2-transcribe" ~/.local/bin/ds2-transcribe
+```
+
+The setup downloads the model once (~140 MB) into `transcribe/models/`; every run
+afterwards is fully offline (`local_files_only=True`).
+
+### Use
+
+```bash
+ds2-transcribe recording.ds2                  # writes recording.txt next to it
+ds2-transcribe -o transcripts/ *.ds2          # all transcripts into one dir
+ds2-transcribe --json *.ds2 > results.jsonl   # machine-readable, one line per file
+```
+
+Options: `-o/--out-dir`, `-m/--model` (default `base.en`), `-t/--threads`
+(default: all cores), `--language` (default `en`), `--json`. Exit code 1 if any
+file failed; the batch continues past failures.
+
+On a 4-vCPU CPU-only VPS, `base.en` runs ~3–4× realtime (a 37 s clip ≈ 10 s).
+Encrypted DS2 (`\x03enc`) is out of scope for v1 — it errors clearly; convert/decrypt
+it elsewhere first. The decoder tolerates the 1–2 byte DMA preamble some DS-5000
+firmware writes before the magic (same fix as `ds2-convert`).
+
+### Cloud vs local
+
+Use **`ds2-convert` → ElevenLabs** (above) when you want ElevenLabs' accuracy and
+don't mind the upload + per-minute cost. Use **`ds2-transcribe`** when you want
+everything to stay on your box with zero external dependencies.
 
 ## Browser app
 
@@ -95,15 +139,21 @@ needing a browser.
 ## File layout
 
 ```
-cli/convert.mjs   headless CLI (registered as `ds2-convert`)
-index.html        browser app shell
-app.js            browser entry: drop/inspect/decode/encode flow
+cli/convert.mjs         headless WAV/MP3 CLI (`ds2-convert`)
+index.html              browser app shell
+app.js                  browser entry: drop/inspect/decode/encode flow
 styles.css
-vendor/dss-codec/ vendored WASM decoder (MIT, hirparak/dss-codec)
-vendor/lamejs/    vendored MP3 encoder (LGPL, zhuker/lamejs)
-vendor/jszip/     vendored ZIP packager (MIT/GPLv3)
-scripts/          Node smoke test
-package.json      pinned deps + bin entry for ds2-convert
+vendor/dss-codec/       vendored WASM decoder (MIT, hirparak/dss-codec)
+vendor/lamejs/          vendored MP3 encoder (LGPL, zhuker/lamejs)
+vendor/jszip/           vendored ZIP packager (MIT/GPLv3)
+bin/ds2-transcribe      launcher for the transcription CLI
+transcribe/ds2_transcribe.py   local-Whisper transcription CLI
+transcribe/vendor/      vendored pure-Python DS2/DSS decoder (patched) + codebooks
+transcribe/requirements.txt    faster-whisper, scipy, numpy
+transcribe/.venv,models/       local venv + downloaded model (gitignored)
+scripts/setup-whisper.sh       one-time venv + model setup
+scripts/node-smoke-test.mjs    Node decode→MP3 smoke test
+package.json            pinned deps + bin entry for ds2-convert
 ```
 
 ## Roadmap (Phase 2)

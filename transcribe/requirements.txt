@@ -1,0 +1,5 @@
+# ds2-transcribe runtime deps (CPU-only, fully offline after model download).
+# faster-whisper pulls ctranslate2, tokenizers, huggingface_hub, onnxruntime, av.
+faster-whisper>=1.1,<2
+scipy>=1.11
+numpy>=1.24
