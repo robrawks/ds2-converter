@@ -74,8 +74,34 @@ ds2-transcribe --json *.ds2 > results.jsonl   # machine-readable, one line per f
 ```
 
 Options: `-o/--out-dir`, `-m/--model` (default `base.en`), `-t/--threads`
-(default: all cores), `--language` (default `en`), `--json`. Exit code 1 if any
-file failed; the batch continues past failures.
+(default: all cores), `--language` (default `en`), `--archive-dir` (move each
+successfully-transcribed source file here), `--json`. Exit code 1 if any file
+failed; the batch continues past failures.
+
+### Inbox workflow (`transcribe`)
+
+For a drop-and-run setup — push files from another machine, then run one command:
+
+```bash
+bash scripts/install-transcribe.sh     # installs `transcribe` into ~/.local/bin
+```
+
+This creates a `transcribe` command that processes a fixed inbox:
+
+```
+$DICTATION_DIR/incoming     <- push .ds2 files here (default: /home/rob/dictation/incoming)
+$DICTATION_DIR/transcripts  -> .txt transcripts land here
+$DICTATION_DIR/processed    -> source files archived here after success
+```
+
+```bash
+transcribe        # transcribes everything in incoming/, archives the sources
+```
+
+Idempotent: only successfully-transcribed files are moved to `processed/`, so a
+re-run never double-processes and failed files stay in `incoming/` to retry. The
+transcript filename mirrors the input (`meeting.ds2` → `meeting.txt`). Override the
+base folder with `DICTATION_DIR=/some/path transcribe`.
 
 On a 4-vCPU CPU-only VPS, `base.en` runs ~3–4× realtime (a 37 s clip ≈ 10 s).
 Encrypted DS2 (`\x03enc`) is out of scope for v1 — it errors clearly; convert/decrypt

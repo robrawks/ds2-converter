@@ -153,7 +153,7 @@ def out_path_for(input_path, out_dir):
     return Path(out_dir) / base if out_dir else Path(input_path).with_suffix(".txt")
 
 
-def process_one(path, transcriber, out_dir):
+def process_one(path, transcriber, out_dir, archive_dir=None):
     result = {
         "input": str(path),
         "output": None,
@@ -162,6 +162,7 @@ def process_one(path, transcriber, out_dir):
         "durationSec": None,
         "words": None,
         "elapsedMs": None,
+        "archived": None,
         "error": None,
     }
     start = time.perf_counter()
@@ -184,11 +185,36 @@ def process_one(path, transcriber, out_dir):
         result["output"] = str(out)
         result["words"] = len(text.split())
         result["status"] = "ok"
+
+        # Only move the source AFTER a successful transcript write. Failed files
+        # stay put so a re-run retries them. Never archive in-place (out == src dir).
+        if archive_dir:
+            result["archived"] = _archive(path, archive_dir)
     except Exception as e:
         result["status"] = "failed"
         result["error"] = str(e)
     result["elapsedMs"] = round((time.perf_counter() - start) * 1000)
     return result
+
+
+def _archive(src, archive_dir):
+    """Move a successfully-processed source file into archive_dir.
+
+    Avoids clobbering an existing file of the same name by suffixing -1, -2, ...
+    Returns the destination path as a string.
+    """
+    import shutil
+
+    src = Path(src)
+    dest_dir = Path(archive_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / src.name
+    n = 1
+    while dest.exists():
+        dest = dest_dir / f"{src.stem}-{n}{src.suffix}"
+        n += 1
+    shutil.move(str(src), str(dest))
+    return str(dest)
 
 
 def main(argv=None):
@@ -204,6 +230,8 @@ def main(argv=None):
     parser.add_argument("-t", "--threads", type=int, default=os.cpu_count(),
                         help="CPU threads (default: all cores)")
     parser.add_argument("--language", default="en", help="language (default: en)")
+    parser.add_argument("--archive-dir", default=None,
+                        help="move each successfully-transcribed source file here")
     parser.add_argument("--json", action="store_true",
                         help="emit one JSON result per file to stdout")
     args = parser.parse_args(argv)
@@ -216,7 +244,7 @@ def main(argv=None):
     failures = []
 
     for path in args.files:
-        r = process_one(path, transcriber, args.out_dir)
+        r = process_one(path, transcriber, args.out_dir, args.archive_dir)
         if r["status"] == "ok":
             ok += 1
         else:
