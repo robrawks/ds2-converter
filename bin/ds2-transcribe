@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Thin launcher: run ds2_transcribe.py with the project's whisper venv.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+VENV_PY="$HERE/../transcribe/.venv/bin/python"
+SCRIPT="$HERE/../transcribe/ds2_transcribe.py"
+
+if [ ! -x "$VENV_PY" ]; then
+  echo "ds2-transcribe: venv not found. Run scripts/setup-whisper.sh first." >&2
+  exit 1
+fi
+exec "$VENV_PY" "$SCRIPT" "$@"

@@ -3,3 +3,9 @@ test_sample.ds2
 *.mp3
 *.wav
 .DS_Store
+
+# ds2-transcribe (Phase 2): venv + downloaded model are local, not committed
+transcribe/.venv/
+transcribe/models/
+__pycache__/
+*.pyc
