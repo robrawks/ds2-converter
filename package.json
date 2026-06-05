@@ -1,14 +1,21 @@
 {
   "name": "ds2-converter",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "description": "Standalone DS2/DSS to MP3 batch converter — browser app + headless CLI",
+  "type": "module",
+  "bin": {
+    "ds2-convert": "./cli/convert.mjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "scripts": {
+    "smoke": "node scripts/node-smoke-test.mjs",
+    "convert": "node cli/convert.mjs",
+    "serve": "python3 -m http.server 8765"
+  },
+  "keywords": ["ds2", "dss", "olympus", "mp3", "dictation", "transcription"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
     "dss-codec": "^0.1.2",
