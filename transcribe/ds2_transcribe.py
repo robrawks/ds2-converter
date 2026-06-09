@@ -39,16 +39,17 @@ DS2_MAGIC = b"\x03ds2"
 DSS_MAGICS = (b"\x02dss", b"\x03dss")
 ENC_MAGIC = b"\x03enc"  # encrypted DS2 — out of scope for v1
 
-# Rough transcription speed as a multiple of realtime on a ~4-core CPU (int8).
-# Used only for the "no output until done" ETA so a long file doesn't look hung;
-# being off by 2x is harmless. Bigger models are dramatically slower per second
-# of audio — large-v3 is ~10-20x slower than base.en on CPU.
+# Rough transcription speed as a multiple of realtime (int8), used only for the
+# "no output until done" ETA so a long file doesn't look hung — being off by 2x
+# is harmless and it intentionally errs toward over-estimating. large-v3 is
+# measured at ~1x realtime on this 8-core CPU; smaller models are progressively
+# faster (rough estimates, since CPU inference scales sub-linearly with cores).
 REALTIME_FACTOR = {
-    "tiny": 8.0, "tiny.en": 8.0,
-    "base": 4.0, "base.en": 4.0,
-    "small": 2.0, "small.en": 2.0,
-    "medium": 0.9, "medium.en": 0.9,
-    "large": 0.3, "large-v1": 0.3, "large-v2": 0.3, "large-v3": 0.3,
+    "tiny": 10.0, "tiny.en": 10.0,
+    "base": 6.0, "base.en": 6.0,
+    "small": 3.0, "small.en": 3.0,
+    "medium": 1.5, "medium.en": 1.5,
+    "large": 0.8, "large-v1": 0.8, "large-v2": 0.8, "large-v3": 0.8,
 }
 
 

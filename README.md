@@ -53,8 +53,9 @@ keys, no uploads, no per-minute fees. Built for the headless VPS path.
 Stack: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2,
 CPU, int8) running `large-v3`, fed directly from the vendored pure-Python DS2/DSS
 decoder — no intermediate audio file. `large-v3` is the most accurate Whisper
-model; on a 4-core CPU it runs at roughly 0.2–0.5× realtime (a 10-min recording
-takes ~20–50 min). For fast, lower-accuracy runs use `-m base.en` or `-m small.en`.
+model; on this 8-core CPU it runs at roughly real-time in int8 (measured ~1×: a
+10-min recording takes ~10 min, denser speech a bit longer). For faster,
+lower-accuracy runs use `-m base.en` or `-m small.en`.
 
 ### One-time setup
 
