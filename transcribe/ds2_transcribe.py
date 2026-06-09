@@ -10,7 +10,8 @@ cloud, no intermediate audio file. Designed for the headless VPS path:
     ds2-transcribe --json *.ds2 > results.jsonl
 
 Run scripts/setup-whisper.sh once first to build the venv and download the
-base.en model into transcribe/models/ (after that everything is offline).
+model (large-v3 by default) into transcribe/models/ (after that everything is
+offline).
 """
 
 import argparse
@@ -37,6 +38,19 @@ WHISPER_RATE = 16000
 DS2_MAGIC = b"\x03ds2"
 DSS_MAGICS = (b"\x02dss", b"\x03dss")
 ENC_MAGIC = b"\x03enc"  # encrypted DS2 — out of scope for v1
+
+# Rough transcription speed as a multiple of realtime (int8), used only for the
+# "no output until done" ETA so a long file doesn't look hung — being off by 2x
+# is harmless and it intentionally errs toward over-estimating. large-v3 is
+# measured at ~1x realtime on this 8-core CPU; smaller models are progressively
+# faster (rough estimates, since CPU inference scales sub-linearly with cores).
+REALTIME_FACTOR = {
+    "tiny": 10.0, "tiny.en": 10.0,
+    "base": 6.0, "base.en": 6.0,
+    "small": 3.0, "small.en": 3.0,
+    "medium": 1.5, "medium.en": 1.5,
+    "large": 0.8, "large-v1": 0.8, "large-v2": 0.8, "large-v3": 0.8,
+}
 
 
 def detect_format(path):
@@ -148,6 +162,13 @@ class Transcriber:
         return " ".join(text.split())  # normalize whitespace
 
 
+def _fmt_eta(seconds):
+    """Human-friendly ETA: seconds under 90s, otherwise rounded minutes."""
+    if seconds >= 90:
+        return f"~{round(seconds / 60)} min"
+    return f"~{seconds}s"
+
+
 def out_path_for(input_path, out_dir):
     base = Path(input_path).stem + ".txt"
     return Path(out_dir) / base if out_dir else Path(input_path).with_suffix(".txt")
@@ -179,10 +200,12 @@ def process_one(path, transcriber, out_dir, archive_dir=None, verbose=False):
         audio = to_whisper_audio(samples, rate)
 
         if verbose:
-            # ~4x realtime on a 4-vCPU CPU; rough ETA so a long file doesn't look hung.
-            eta = max(1, round(result["durationSec"] / 4))
+            # Rough ETA so a long file doesn't look hung. Speed depends heavily
+            # on the model, so scale by its realtime factor (see REALTIME_FACTOR).
+            factor = REALTIME_FACTOR.get(transcriber.model_name, 1.0)
+            eta = max(1, round(result["durationSec"] / factor))
             log(f"        {result['durationSec']:.0f}s audio — transcribing "
-                f"(~{eta}s on CPU, no output until done)...")
+                f"({_fmt_eta(eta)} on CPU, no output until done)...")
 
         text = transcriber.transcribe(audio)
         out = out_path_for(path, out_dir)
@@ -231,8 +254,9 @@ def main(argv=None):
     parser.add_argument("files", nargs="+", help="input .ds2 / .dss / .wav files")
     parser.add_argument("-o", "--out-dir", default=None,
                         help="output directory (default: alongside each input)")
-    parser.add_argument("-m", "--model", default="base.en",
-                        help="whisper model (default: base.en)")
+    parser.add_argument("-m", "--model", default="large-v3",
+                        help="whisper model (default: large-v3; use base.en/small.en "
+                             "for much faster, lower-accuracy runs)")
     parser.add_argument("-t", "--threads", type=int, default=os.cpu_count(),
                         help="CPU threads (default: all cores)")
     parser.add_argument("--language", default="en", help="language (default: en)")

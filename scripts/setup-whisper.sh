@@ -3,10 +3,10 @@
 # and pre-download the Whisper model so all later runs are fully offline.
 #
 # Idempotent — safe to re-run. Usage:
-#   bash scripts/setup-whisper.sh [model]      # default model: base.en
+#   bash scripts/setup-whisper.sh [model]      # default model: large-v3
 set -euo pipefail
 
-MODEL="${1:-base.en}"
+MODEL="${1:-large-v3}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TRANSCRIBE_DIR="$REPO_DIR/transcribe"
 VENV_DIR="$TRANSCRIBE_DIR/.venv"
