@@ -51,19 +51,22 @@ transcribe it to plain text on your own machine with a local Whisper model. No A
 keys, no uploads, no per-minute fees. Built for the headless VPS path.
 
 Stack: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2,
-CPU, int8) running `base.en`, fed directly from the vendored pure-Python DS2/DSS
-decoder — no intermediate audio file.
+CPU, int8) running `large-v3`, fed directly from the vendored pure-Python DS2/DSS
+decoder — no intermediate audio file. `large-v3` is the most accurate Whisper
+model; on a 4-core CPU it runs at roughly 0.2–0.5× realtime (a 10-min recording
+takes ~20–50 min). For fast, lower-accuracy runs use `-m base.en` or `-m small.en`.
 
 ### One-time setup
 
 ```bash
-bash scripts/setup-whisper.sh          # venv + faster-whisper + download base.en
+bash scripts/setup-whisper.sh          # venv + faster-whisper + download large-v3
 # optional: put it on PATH
 ln -s "$PWD/bin/ds2-transcribe" ~/.local/bin/ds2-transcribe
 ```
 
-The setup downloads the model once (~140 MB) into `transcribe/models/`; every run
-afterwards is fully offline (`local_files_only=True`).
+The setup downloads the model once (~2.9 GB for `large-v3`) into
+`transcribe/models/`; every run afterwards is fully offline
+(`local_files_only=True`).
 
 ### Use
 
@@ -73,7 +76,7 @@ ds2-transcribe -o transcripts/ *.ds2          # all transcripts into one dir
 ds2-transcribe --json *.ds2 > results.jsonl   # machine-readable, one line per file
 ```
 
-Options: `-o/--out-dir`, `-m/--model` (default `base.en`), `-t/--threads`
+Options: `-o/--out-dir`, `-m/--model` (default `large-v3`), `-t/--threads`
 (default: all cores), `--language` (default `en`), `--archive-dir` (move each
 successfully-transcribed source file here), `--json`. Exit code 1 if any file
 failed; the batch continues past failures.
